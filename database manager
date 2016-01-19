@@ -1,0 +1,132 @@
+import web
+
+db = web.database(dbn='sqlite',
+        db='AuctionBase.db'
+    )
+
+# Enforce foreign key constraints
+def enforceForeignKey():
+    db.query('PRAGMA foreign_keys = ON')
+
+# initiates a transaction on the database
+def transaction():
+    return db.transaction()
+
+# returns the current time from your database
+def getTime():
+    # TODO: update the query string to match
+    # the correct column and table name in your database
+    query_string = 'select curr_time from CurrentTime'
+    result = query(query_string)
+    # alternatively: return results[0]['currenttime']
+    return result[0].curr_time
+    
+# returns a single item specified by the Item's ID in the database
+def getItemById(item_id):
+    query_string = 'select * from Items where itemID = $itemID'
+    result = query(query_string, {'itemID': item_id})
+    try:
+        return result[0]
+    except:
+        return None
+
+def changeTime(selected_time):
+    query_string = 'select curr_time from CurrentTime'
+    result = query(query_string)
+    old_time = result[0].curr_time
+    if old_time >= selected_time:
+        return -1
+    else:
+        query_string = "update CurrentTime set curr_time='" + selected_time + "';"
+        try:
+            query(query_string)
+        except:
+            pass
+        return 1
+
+def searchItems(itemid, minprice, maxprice, status, category, description):
+    query_string = "select * from Items"
+    if category != '':
+        query_string += ", Categories"
+    query_string += " where currently >= $minprice and currently <= $maxprice and Description like '%%" + description + "%%'"
+    if itemid != '':
+        query_string += ' and Items.itemID = ' + itemid
+    query_string1 = 'select curr_time from CurrentTime'
+    result = query(query_string1)
+    current_time = result[0].curr_time
+    if status == 'open':
+        query_string += " and started <= '" + current_time + "' and ends >= '" + current_time + "'" + " and (buy_price > currently or buy_price is NULL)"
+    elif status == 'close':
+        query_string += " and (ends <'" + current_time + "' or currently > buy_price)"
+    elif status == 'notStarted':
+        query_string += " and started > '" + current_time + "'"
+    if category != '':
+        query_string += " and Items.itemID = Categories.itemID and c_name = '" + category + "'"
+    return query(query_string, {'minprice': minprice, 'maxprice': maxprice})
+
+def add_bid(itemid, userid, price):
+    query_string = 'select curr_time from CurrentTime'
+    result1 = query(query_string)
+    current_time = result1[0].curr_time
+    query_string1 = "insert into Bids values(" + itemid + ",'" + userid + "'," + price + ",'" + current_time + "')"
+    query_string2 = "select * from Items where itemId = "+ itemid
+    result_item = query(query_string2)
+    if not (result_item[0].started <= current_time and result_item[0].ends >= current_time and (result_item[0].buy_price > result_item[0].currently or result_item[0].buy_price == None)):
+        return -1
+    try:
+        query(query_string1)
+    except Exception as e:
+        query_string3 = "select * from Bids where itemID="+itemid+" and userID='"+userid+"' and amount="+price+" and time='"+current_time+"'"
+        result3 = query(query_string3)
+        result3[0].time
+    return 0
+
+def auction(itemid):
+    query_string1 = 'select * from Items where itemID = $itemID'
+    result1 = query(query_string1, {'itemID': itemid})
+    try:
+        auctionEnds = result1[0].ends
+    except:
+        return ('error', '', '', '','', '','')
+    currently = result1[0].currently
+    try:
+        buyPrice = result1[0].buy_price
+    except:
+        buyPrice = 9999999999
+    if buyPrice == None:
+        buyPrice = 9999999999     
+    
+    query_string2 = 'select * from Bids where itemID = $itemID'
+    result2 = query(query_string2, {'itemID': itemid})
+    
+    query_string4 = 'select * from Categories where itemID = $itemID'
+    result4 = query(query_string4, {'itemID': itemid})
+
+    query_string3 = 'select * from CurrentTime'
+    result3 = query(query_string3)
+    current_time = result3[0].curr_time
+    winnerId = ''
+    winnerPrice = ''
+    query_string6 = 'select userID, rating, location, country from Users, Items where userID=seller_userID and itemID=' + itemid
+    result6 = query(query_string6)
+    query_string7 = 'select * from Items where itemID=' + itemid
+    result7 = query(query_string7)
+    
+    if current_time > auctionEnds or currently >= buyPrice:
+        status = 'closed'
+        for bid in result2:
+            if bid.amount == currently:
+                winnerId = bid.userID
+                winnerPrice = bid.amount
+                break
+        if winnerId == '':
+            status = 'closednowinner'
+    else:
+        status = 'open'
+    if currently == buyPrice and currently == 0.01 and current_time < auctionEnds:
+        status = 'open'
+    return (status, winnerId, winnerPrice, result2, result4, result6,result7)
+
+# wrapper method around web.py's db.query method
+def query(query_string, vars = {}):
+    return list(db.query(query_string, vars))
