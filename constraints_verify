@@ -1,0 +1,4 @@
+SELECT * FROM Items WHERE seller_userID NOT IN (SELECT userID FROM Users);
+SELECT * FROM Categories WHERE itemID NOT IN (SELECT itemID FROM Items);
+SELECT * FROM Bids WHERE itemID NOT IN (SELECT itemID FROM Items); 
+SELECT * FROM Bids WHERE userID NOT IN (SELECT userID FROM Users);
