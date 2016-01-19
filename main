@@ -7,8 +7,6 @@ import sqlitedb
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 
-######################BEGIN HELPER METHODS######################
-
 # helper method to convert times from database (which will return a string)
 # into datetime objects. This will allow you to compare times correctly (using
 # ==, !=, <, >, etc.) instead of lexicographically as strings.
