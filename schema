@@ -1,0 +1,51 @@
+DROP TABLE if exists Items;
+DROP TABLE if exists Categories;
+DROP TABLE if exists Bids;
+DROP TABLE if exists Users;
+DROP TABLE if exists CurrentTime;
+
+CREATE TABLE Items (
+   itemID INTEGER PRIMARY KEY,
+   name VARCHAR(255) NOT NULL,
+   currently REAL NOT NULL,
+   first_bid REAL NOT NULL,
+   buy_price REAL,
+   number_of_bids INTEGER NOT NULL,
+   started TEXT NOT NULL,
+   ends TEXT NOT NULL,
+   seller_userID VARCHAR(255) NOT NULL,
+   description TEXT,
+   CHECK (ends > started),
+   FOREIGN KEY(seller_userID) REFERENCES Users(userID) ON DELETE CASCADE
+);
+
+CREATE TABLE Categories (
+   itemID INTEGER NOT NULL,
+   c_name VARCHAR(255) NOT NULL,
+   PRIMARY KEY(itemID, c_name),
+   FOREIGN KEY(itemID) REFERENCES Items(itemID) ON DELETE CASCADE
+);
+
+CREATE TABLE Bids (
+   itemID INTEGER NOT NULL,
+   userID VARCHAR(255) NOT NULL,
+   amount REAL NOT NULL,
+   time TEXT NOT NULL,
+   PRIMARY KEY(itemID, userID, time),
+   UNIQUE(itemID, userID, amount),
+   UNIQUE(itemID, time),
+   FOREIGN KEY(itemID) REFERENCES Items(itemID) ON DELETE CASCADE
+   FOREIGN KEY(userID) REFERENCES Users(userID) ON DELETE CASCADE
+);
+
+CREATE TABLE Users (
+   userID VARCHAR(255) PRIMARY KEY,
+   rating INTEGER NOT NULL,
+   location VARCHAR(255),
+   country VARCHAR(255)
+);
+
+CREATE TABLE CurrentTime (curr_time TEXT);
+INSERT INTO CurrentTime VALUES("2001-12-20 00:00:01");
+SELECT * FROM CurrentTime;
+
