@@ -1,0 +1,158 @@
+#!/usr/bin/env python
+
+import sys; sys.path.insert(0, 'lib')
+import os
+import web
+import sqlitedb
+from jinja2 import Environment, FileSystemLoader
+from datetime import datetime
+
+######################BEGIN HELPER METHODS######################
+
+# helper method to convert times from database (which will return a string)
+# into datetime objects. This will allow you to compare times correctly (using
+# ==, !=, <, >, etc.) instead of lexicographically as strings.
+
+def string_to_time(date_str):
+    return datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+
+# helper method to render a template in the templates/ directory
+#
+# `template_name': name of template file to render
+#
+# `**context': a dictionary of variable names mapped to values
+# that is passed to Jinja2's templating engine
+#
+def render_template(template_name, **context):
+    extensions = context.pop('extensions', [])
+    globals = context.pop('globals', {})
+
+    jinja_env = Environment(autoescape=True,
+            loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates')),
+            extensions=extensions,
+            )
+    jinja_env.globals.update(globals)
+
+    web.header('Content-Type','text/html; charset=utf-8', unique=True)
+
+    return jinja_env.get_template(template_name).render(context)
+
+urls = ('/currtime', 'curr_time',
+        '/selecttime', 'select_time',
+        '/search', 'search',
+        '/add_bid', 'add_bid'
+        # TODO: add additional URLs here
+        # first parameter => URL, second parameter => class name
+        )
+
+class curr_time:
+    # A simple GET request, to '/currtime'
+    #
+    def GET(self):
+        current_time = sqlitedb.getTime()
+        return render_template('curr_time.html', time = current_time)
+
+class select_time:
+    # Another GET request, this time to the URL '/selecttime'
+    def GET(self):
+        return render_template('select_time.html')
+
+    # A POST request
+    #
+    def POST(self):
+        post_params = web.input()
+        MM = post_params['MM']
+        dd = post_params['dd']
+        yyyy = post_params['yyyy']    
+        HH = post_params['HH']
+        mm = post_params['mm']
+        ss = post_params['ss'];
+        enter_name = post_params['entername']
+
+
+        selected_time = '%s-%s-%s %s:%s:%s' % (yyyy, MM, dd, HH, mm, ss)
+        update_message = '(Hello, %s. Previously selected time was: %s.)' % (enter_name, selected_time)
+
+        if not yyyy.isdigit():
+            new_message = 'Please enter a valid year.'
+            return render_template('select_time.html', message = update_message, message1 = new_message)
+        f = sqlitedb.changeTime(selected_time)
+        if f == -1:
+            new_message = 'New time must be after the current time.'
+        else:
+            new_message = 'Time has been changed successfully.'
+        # Here, we assign `update_message' to `message', which means
+        # we'll refer to it in our template as `message'
+        return render_template('select_time.html', message = update_message, message1 = new_message)
+
+class search:
+    def GET(self):
+        return render_template('search.html')
+
+    def POST(self):
+        post_params = web.input()
+        try:
+            itemid = post_params['itemID']
+            status = post_params['status']
+            minprice = post_params['minPrice']
+            maxprice = post_params['maxPrice']
+            category = post_params['category']
+            description = post_params['description']
+            search_result = ''
+            if itemid == '' and minprice == '' and maxprice == '' and category == '' and description == '':
+                update_message = 'Incomplete input. Please enter in atleast one text box.'
+                return render_template('search.html', message = update_message, search_result = '')
+            if not itemid.isdigit() and itemid != '':
+                update_message = 'Item ID must be an integer.'
+                return render_template('search.html', message = update_message, search_result = '')
+            if minprice == '':
+                minprice = 0.0
+            if maxprice == '':
+                maxprice = 99999999
+            try:
+                float(minprice)
+                float(maxprice)
+                if float(maxprice) < float(minprice):
+                    update_message = 'Maximum price has to be greater than or equal to the minimum price.'
+                    return render_template('search.html', message = update_message, search_result = '')
+                search_result = sqlitedb.searchItems(itemid, float(minprice), float(maxprice), status, category, description)
+                update_message = 'None'
+            except ValueError:
+                update_message = 'Please enter valid maximum and minimum prices.'
+            return render_template('search.html', message = update_message, search_result = search_result)
+        except:
+            itemid1 = post_params['itemID']
+            auction_result = sqlitedb.auction(itemid)
+            return render_template('search.html', message11 = auction_result[0], message12 = auction_result[1], message13 = auction_result[2], message14 = auction_result[3], message15 = itemid1, message16 = auction_result[4], message17 = auction_result[5], message18 = auction_result[6])
+
+
+class add_bid:
+    def GET(self):
+        return render_template('add_bid.html')
+
+    def POST(self):
+        post_params = web.input()
+        itemid = post_params['itemID']
+        userid = post_params['userID']
+        price = post_params['price']
+        if itemid == '' or userid == '' or price == '':
+            update_message = 'Incomplete input. Please enter all values.'
+            return render_template('add_bid.html', message = update_message)
+        if itemid != '' and not itemid.isdigit():
+            update_message = 'Item ID has to be an integer.'
+            return render_template('add_bid.html', message = update_message)
+        try:
+            f = sqlitedb.add_bid(itemid, userid, price)
+            if f == -1:
+                update_message = 'Either a foreign key constraint violation or trigger raised.'
+            else:
+                update_message = 'Bid has been added successfully.'
+        except Exception as e:
+            update_message = 'Either a foreign key constraint violation or trigger raised.'
+        return render_template('add_bid.html', message = update_message)
+
+if __name__ == '__main__':
+    web.internalerror = web.debugerror
+    app = web.application(urls, globals())
+    app.add_processor(web.loadhook(sqlitedb.enforceForeignKey))
+    app.run()
